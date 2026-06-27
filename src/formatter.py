@@ -71,12 +71,16 @@ def _byte_len(text):
 
 
 def _byte_truncate(text, max_bytes):
-    """Truncate text to fit within max_bytes without breaking UTF-8 characters."""
+    """Truncate text to fit within max_bytes at a valid UTF-8 character boundary."""
     encoded = text.encode("utf-8")
     if len(encoded) <= max_bytes:
         return text
     truncated = encoded[:max_bytes]
-    return truncated.decode("utf-8", errors="ignore")
+    # Walk back past continuation bytes (10xxxxxx = 0x80-0xBF) to find
+    # the last complete character start, avoiding garbled text.
+    while truncated and (truncated[-1] & 0xC0) == 0x80:
+        truncated = truncated[:-1]
+    return truncated.decode("utf-8")
 
 
 def split_message(text, max_bytes=4096):
