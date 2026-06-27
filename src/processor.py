@@ -80,17 +80,27 @@ def parse_llm_response(text):
         return {"news": [], "github_projects": []}
 
 
-def process_items(raw_items, model="claude-sonnet-4-6"):
-    """Send raw items to Claude for curation. Returns structured dict with news + github_projects."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        logger.error("ANTHROPIC_API_KEY not set")
+def process_items(raw_items, model=None):
+    """Send raw items to LLM for curation. Supports Anthropic and DeepSeek (via base_url).
+    Returns structured dict with news + github_projects."""
+    auth_token = os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")
+    if not auth_token:
+        logger.error("ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY not set")
         return _fallback_items(raw_items)
+
+    base_url = os.environ.get("ANTHROPIC_BASE_URL")
+    if model is None:
+        model = os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro")
 
     user_prompt = build_prompt(raw_items)
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
+        client_kwargs = {"api_key": auth_token}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+            logger.info(f"Using custom base URL: {base_url}")
+        client = anthropic.Anthropic(**client_kwargs)
+        logger.info(f"Calling model: {model}")
         response = client.messages.create(
             model=model,
             max_tokens=4096,

@@ -30,7 +30,8 @@ github:
   max_results_per_query: 10
 
 llm:
-  model: "claude-sonnet-4-6"
+  model: "deepseek-v4-pro"
+  base_url: "https://api.deepseek.com/anthropic"
   max_items_to_select: 18
 
 wecom:

@@ -29,8 +29,8 @@ def main():
     logger.info("=== AI Daily Bot Starting ===")
 
     env_errors = []
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        env_errors.append("ANTHROPIC_API_KEY")
+    if not (os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")):
+        env_errors.append("ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY")
     if not os.environ.get("WECOM_WEBHOOK_URL"):
         env_errors.append("WECOM_WEBHOOK_URL")
 

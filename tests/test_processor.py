@@ -82,13 +82,13 @@ class TestProcessItems:
             )
         ]
 
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}), \
+        with patch.dict("os.environ", {"ANTHROPIC_AUTH_TOKEN": "sk-test"}), \
              patch("src.processor.anthropic.Anthropic") as mock_anthro:
             mock_instance = Mock()
             mock_instance.messages.create.return_value = mock_response
             mock_anthro.return_value = mock_instance
 
-            result = process_items(RAW_ITEMS, model="claude-sonnet-4-6")
+            result = process_items(RAW_ITEMS)
 
         assert len(result["news"]) == 1
         assert result["news"][0]["title"] == "T"
@@ -96,20 +96,40 @@ class TestProcessItems:
         assert result["github_projects"][0]["title"] == "R"
 
     def test_handles_api_error(self):
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}), \
+        with patch.dict("os.environ", {"ANTHROPIC_AUTH_TOKEN": "sk-test"}), \
              patch("src.processor.anthropic.Anthropic") as mock_anthro:
             mock_anthro.side_effect = Exception("API key invalid")
 
-            result = process_items(RAW_ITEMS, model="claude-sonnet-4-6")
+            result = process_items(RAW_ITEMS)
 
         assert "news" in result
         assert len(result["news"]) > 0  # fallback returns raw items
 
+    def test_uses_custom_base_url(self):
+        """Verify base_url is passed to Anthropic client when env var is set."""
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(type="text", text='{"news": [], "github_projects": []}')]
+
+        with patch.dict("os.environ", {
+            "ANTHROPIC_AUTH_TOKEN": "sk-test",
+            "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+        }), patch("src.processor.anthropic.Anthropic") as mock_anthro:
+            mock_instance = Mock()
+            mock_instance.messages.create.return_value = mock_response
+            mock_anthro.return_value = mock_instance
+
+            process_items(RAW_ITEMS)
+
+        mock_anthro.assert_called_once_with(
+            api_key="sk-test",
+            base_url="https://api.deepseek.com/anthropic",
+        )
+
 
 class TestProcessItemsEdgeCases:
-    def test_missing_api_key_returns_fallback(self):
-        with patch.dict("os.environ", {}, clear=True):  # Remove ANTHROPIC_API_KEY
-            from src.processor import process_items
-            result = process_items(RAW_ITEMS, model="claude-sonnet-4-6")
+    def test_missing_auth_token_returns_fallback(self):
+        with patch.dict("os.environ", {}, clear=True):
+            from src.processor import process_items as pi
+            result = pi(RAW_ITEMS)
             assert "news" in result
             assert "github_projects" in result
