@@ -1,0 +1,37 @@
+rss_feeds:
+  - name: "机器之心"
+    url: "https://www.jiqizhixin.com/rss"
+    language: "zh"
+  - name: "量子位"
+    url: "https://www.qbitai.com/feed"
+    language: "zh"
+  - name: "Hugging Face Blog"
+    url: "https://huggingface.co/blog/feed.xml"
+    language: "en"
+  - name: "OpenAI Blog"
+    url: "https://openai.com/blog/rss.xml"
+    language: "en"
+  - name: "Anthropic Blog"
+    url: "https://www.anthropic.com/blog/rss.xml"
+    language: "en"
+
+arxiv:
+  category: "cs.AI"
+  max_results: 15
+  language: "en"
+
+github:
+  trending_languages: ["python", "javascript", "typescript", "rust", "julia"]
+  search_queries:
+    - "topic:ai+created:>2026-06-01"
+    - "topic:llm+created:>2026-06-01"
+    - "topic:machine-learning+created:>2026-06-01"
+    - "topic:deep-learning+created:>2026-06-01"
+  max_results_per_query: 10
+
+llm:
+  model: "claude-sonnet-4-6"
+  max_items_to_select: 18
+
+wecom:
+  max_chars_per_message: 4096
