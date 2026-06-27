@@ -47,7 +47,10 @@ def send_report(markdown_content, webhook_url=None, max_chars=4096):
         logger.error("WECOM_WEBHOOK_URL not set")
         return False
 
-    from .formatter import split_message
+    try:
+        from formatter import split_message
+    except ImportError:
+        from .formatter import split_message
 
     parts = split_message(markdown_content, max_chars)
     all_ok = True

@@ -32,7 +32,7 @@ def fetch_rss_items(feed_url, source_name, language):
     """Fetch and parse an RSS feed. Returns list of standardized item dicts."""
     items = []
     try:
-        with httpx.Client(timeout=30) as client:
+        with httpx.Client(timeout=60, follow_redirects=True) as client:
             resp = client.get(feed_url, headers={"User-Agent": USER_AGENT})
             resp.raise_for_status()
 
@@ -65,7 +65,7 @@ def fetch_arxiv_items(category="cs.AI", max_results=15):
         f"search_query=cat:{category}&sortBy=lastUpdatedDate&max_results={max_results}"
     )
     try:
-        with httpx.Client(timeout=30) as client:
+        with httpx.Client(timeout=60, follow_redirects=True) as client:
             resp = client.get(url, headers={"User-Agent": USER_AGENT})
             resp.raise_for_status()
 
