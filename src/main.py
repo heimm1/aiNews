@@ -1,11 +1,16 @@
 """AI Daily Bot — Main entry point.
 
-Orchestrates: collect -> process -> format -> notify
+Orchestrates: collect → process → format → notify
 """
 
 import logging
 import os
 import sys
+
+from collectors import collect_all
+from processor import process_items
+from formatter import format_report
+from notifier import send_report
 
 
 def setup_logging():
@@ -36,8 +41,6 @@ def main():
 
     # 1. Collect
     logger.info("Step 1/4: Collecting items from all sources...")
-    from collectors import collect_all
-
     raw_items = collect_all()
     if not raw_items:
         logger.error("No items collected. Check network or source availability.")
@@ -45,8 +48,6 @@ def main():
 
     # 2. Process
     logger.info(f"Step 2/4: Processing {len(raw_items)} items with LLM...")
-    from processor import process_items
-
     curated = process_items(raw_items)
     news_count = len(curated.get("news", []))
     github_count = len(curated.get("github_projects", []))
@@ -58,15 +59,11 @@ def main():
 
     # 3. Format
     logger.info("Step 3/4: Formatting report...")
-    from formatter import format_report
-
     markdown = format_report(curated)
     logger.info(f"  Report length: {len(markdown)} chars")
 
     # 4. Notify
     logger.info("Step 4/4: Sending to WeCom...")
-    from notifier import send_report
-
     ok = send_report(markdown)
     if ok:
         logger.info("=== AI Daily Bot Complete ===")
