@@ -1,9 +1,15 @@
 """Tests for collectors module."""
 
-import pytest
 import httpx
 from unittest.mock import patch, Mock
-from src.collectors import fetch_rss_items, fetch_arxiv_items, fetch_github_items, collect_all
+from src.collectors import (
+    fetch_rss_items,
+    fetch_arxiv_items,
+    fetch_github_items,
+    collect_all,
+    load_config,
+    _parse_trending_html,
+)
 
 
 SAMPLE_RSS_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -137,7 +143,6 @@ class TestFetchGithubItems:
             items = fetch_github_items(
                 queries=["topic:ai"],
                 max_per_query=5,
-                trending_languages=[],
                 github_token=None,
             )
 
@@ -157,8 +162,97 @@ class TestFetchGithubItems:
             items = fetch_github_items(
                 queries=["topic:ai"],
                 max_per_query=5,
-                trending_languages=[],
                 github_token=None,
             )
 
         assert items == []
+
+
+SAMPLE_TRENDING_HTML = """<html>
+<body>
+  <article class="Box-row">
+    <h2><a href="/openai/whisper">openai/whisper</a></h2>
+    <p class="col-9">Speech recognition with AI</p>
+    <span>10,234 stars</span>
+  </article>
+  <article class="Box-row">
+    <h2><a href="/john/utility-tools">john/utility-tools</a></h2>
+    <p class="col-9">A collection of utility functions</p>
+    <span>100 stars</span>
+  </article>
+</body>
+</html>"""
+
+
+class TestLoadConfig:
+    def test_loads_valid_config(self):
+        expected = {
+            "rss_feeds": [{"name": "Test", "url": "http://test.com/rss", "language": "en"}],
+            "arxiv": {"category": "cs.AI", "max_results": 15},
+            "github": {"search_queries": ["topic:ai"]},
+        }
+        with patch("builtins.open") as mock_open:
+            mock_open.return_value.__enter__.return_value.read.return_value = "dummy"
+            with patch("src.collectors.yaml.safe_load", return_value=expected):
+                config = load_config("dummy.yaml")
+
+        assert config == expected
+
+    def test_handles_missing_file(self):
+        with patch("builtins.open", side_effect=FileNotFoundError):
+            config = load_config("nonexistent.yaml")
+
+        assert config == {"rss_feeds": [], "arxiv": {}, "github": {}}
+
+    def test_handles_malformed_yaml(self):
+        import yaml
+
+        with patch("builtins.open") as mock_open:
+            mock_open.return_value.__enter__.return_value.read.return_value = "bad: yaml: : : :"
+            with patch("src.collectors.yaml.safe_load", side_effect=yaml.YAMLError("bad")):
+                config = load_config("bad.yaml")
+
+        assert config == {"rss_feeds": [], "arxiv": {}, "github": {}}
+
+
+class TestCollectAll:
+    def test_dedup_by_url(self):
+        fake_config = {
+            "rss_feeds": [{"name": "TestFeed", "url": "http://test.com/rss", "language": "en"}],
+            "arxiv": {"category": "cs.AI", "max_results": 15},
+            "github": {"search_queries": ["topic:ai"], "max_results_per_query": 5},
+        }
+
+        with patch("src.collectors.load_config", return_value=fake_config):
+            with patch("src.collectors.fetch_rss_items") as mock_rss:
+                mock_rss.return_value = [
+                    {"title": "Same URL", "url": "https://example.com/dup", "source": "RSS"},
+                ]
+                with patch("src.collectors.fetch_arxiv_items") as mock_arxiv:
+                    mock_arxiv.return_value = [
+                        {"title": "Same URL", "url": "https://example.com/dup", "source": "ArXiv"},
+                        {"title": "Unique ArXiv", "url": "https://arxiv.org/abs/9999.99999", "source": "ArXiv"},
+                    ]
+                    with patch("src.collectors.fetch_github_items") as mock_gh:
+                        mock_gh.return_value = [
+                            {"title": "Unique GH", "url": "https://github.com/foo/bar", "source": "GitHub"},
+                        ]
+                        items = collect_all("dummy.yaml")
+
+        assert len(items) == 3
+        urls = {item["url"] for item in items}
+        assert urls == {"https://example.com/dup", "https://arxiv.org/abs/9999.99999", "https://github.com/foo/bar"}
+
+
+class TestParseTrendingHtml:
+    def test_parses_trending_html_and_filters_ai(self):
+        items = _parse_trending_html(SAMPLE_TRENDING_HTML)
+
+        # only "openai/whisper" matches AI keywords
+        assert len(items) == 1
+        assert items[0]["title"] == "openai/whisper ⭐10234"
+        assert items[0]["url"] == "https://github.com/openai/whisper"
+        assert items[0]["source"] == "GitHub Trending"
+        assert items[0]["language"] == "en"
+        assert items[0]["item_type"] == "github"
+        assert items[0]["stars"] == 10234

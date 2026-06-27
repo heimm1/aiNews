@@ -17,8 +17,15 @@ USER_AGENT = "ai-daily-bot/1.0"
 
 
 def load_config(path="config/sources.yaml"):
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
+    try:
+        with open(path, "r") as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        logger.warning(f"Config file not found at {path}, using defaults")
+        return {"rss_feeds": [], "arxiv": {}, "github": {}}
+    except (yaml.YAMLError, OSError) as e:
+        logger.warning(f"Failed to load config from {path}: {e}, using defaults")
+        return {"rss_feeds": [], "arxiv": {}, "github": {}}
 
 
 def fetch_rss_items(feed_url, source_name, language):
@@ -76,7 +83,7 @@ def fetch_arxiv_items(category="cs.AI", max_results=15):
             items.append({
                 "title": title,
                 "summary": summary,
-                "url": id_el.text.strip() if id_el is not None else "",
+                "url": (id_el.text or "").strip() if id_el is not None else "",
                 "source": "ArXiv cs.AI",
                 "language": "en",
                 "item_type": "news",
@@ -87,7 +94,7 @@ def fetch_arxiv_items(category="cs.AI", max_results=15):
     return items
 
 
-def fetch_github_items(queries, max_per_query, trending_languages, github_token=None):
+def fetch_github_items(queries, max_per_query, github_token=None):
     """Fetch trending AI repos from GitHub Search API and Trending page."""
     items = []
     headers = {"User-Agent": USER_AGENT, "Accept": "application/vnd.github+json"}
@@ -122,7 +129,7 @@ def fetch_github_items(queries, max_per_query, trending_languages, github_token=
             try:
                 resp = client.get("https://github.com/trending/python?since=daily")
                 if resp.status_code == 200:
-                    trending_items = _parse_trending_html(resp.text, trending_languages)
+                    trending_items = _parse_trending_html(resp.text)
                     items.extend(trending_items)
             except Exception as e:
                 logger.warning(f"GitHub Trending scrape failed: {e}")
@@ -130,7 +137,7 @@ def fetch_github_items(queries, max_per_query, trending_languages, github_token=
     return items
 
 
-def _parse_trending_html(html, languages):
+def _parse_trending_html(html):
     """Parse GitHub Trending page. Uses regex fallback since no official API."""
     items = []
     pattern = re.compile(
@@ -199,7 +206,6 @@ def collect_all(config_path="config/sources.yaml"):
     github_items = fetch_github_items(
         queries=github_cfg.get("search_queries", []),
         max_per_query=github_cfg.get("max_results_per_query", 10),
-        trending_languages=github_cfg.get("trending_languages", []),
         github_token=github_token,
     )
     all_items.extend(github_items)
