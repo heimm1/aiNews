@@ -38,7 +38,7 @@ def send_markdown(content, webhook_url):
         return False
 
 
-def send_report(markdown_content, webhook_url=None, max_chars=4096):
+def send_report(markdown_content, webhook_url=None, max_bytes=4096):
     """Send report to WeCom, auto-splitting if too long. Returns True on success."""
     if webhook_url is None:
         webhook_url = os.environ.get("WECOM_WEBHOOK_URL", "")
@@ -52,7 +52,7 @@ def send_report(markdown_content, webhook_url=None, max_chars=4096):
     except ImportError:
         from .formatter import split_message
 
-    parts = split_message(markdown_content, max_chars)
+    parts = split_message(markdown_content, max_bytes)
     all_ok = True
 
     for i, part in enumerate(parts):

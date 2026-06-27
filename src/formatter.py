@@ -66,40 +66,58 @@ def number_emoji(n):
     return f"{n}."
 
 
-def split_message(text, max_chars=4096):
-    """Split a long message into parts, trying to break at section boundaries."""
-    if len(text) <= max_chars:
+def _byte_len(text):
+    return len(text.encode("utf-8"))
+
+
+def _byte_truncate(text, max_bytes):
+    """Truncate text to fit within max_bytes without breaking UTF-8 characters."""
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    truncated = encoded[:max_bytes]
+    return truncated.decode("utf-8", errors="ignore")
+
+
+def split_message(text, max_bytes=4096):
+    """Split message by WeCom byte limit (4096 UTF-8 bytes), at paragraph boundaries."""
+    if _byte_len(text) <= max_bytes:
         return [text]
 
     parts = []
     paragraphs = text.split("\n\n")
-    current = ""
 
     cont_prefix = "（续）\n"
-    cont_prefix_len = len(cont_prefix)
+    cont_prefix_bytes = _byte_len(cont_prefix)
 
+    current = ""
     for para in paragraphs:
         if current:
-            candidate = current + "\n\n" + para
-            if len(candidate) <= max_chars:
-                current = candidate
+            combined = current + "\n\n" + para
+            if _byte_len(combined) <= max_bytes:
+                current = combined
                 continue
+            # Current paragraph would push us over — save current part and start new
             parts.append(current)
+            current = ""
 
-        # Start a new part with this paragraph
-        if len(para) <= max_chars:
+        if _byte_len(para) <= max_bytes:
             current = para
         else:
-            # Split long paragraph: first chunk at max_chars
-            parts.append(para[:max_chars])
-            remaining = para[max_chars:]
-            while remaining:
-                chunk_size = max_chars - cont_prefix_len
-                chunk = remaining[:chunk_size]
-                remaining = remaining[chunk_size:]
-                if chunk:
-                    parts.append(cont_prefix + chunk)
-            current = ""
+            # Single paragraph exceeds limit — split by bytes
+            while _byte_len(para) > max_bytes:
+                chunk = _byte_truncate(para, max_bytes)
+                parts.append(chunk)
+                para = para[len(chunk):]
+                if para:
+                    prefix_bytes = max_bytes - cont_prefix_bytes
+                    prefix = _byte_truncate(para, prefix_bytes)
+                    parts.append(cont_prefix + prefix)
+                    para = para[len(prefix):]
+                else:
+                    break
+            if para:
+                current = para
 
     if current:
         parts.append(current)
@@ -108,11 +126,12 @@ def split_message(text, max_chars=4096):
     if len(parts) > 1:
         for i in range(len(parts)):
             indicator = f"（Part {i+1}/{len(parts)}）\n\n"
-            available = max_chars - len(indicator)
-            if available >= len(parts[i]):
+            indicator_bytes = _byte_len(indicator)
+            available = max_bytes - indicator_bytes
+            if _byte_len(parts[i]) <= available:
                 parts[i] = indicator + parts[i]
             elif available > 0:
-                parts[i] = indicator + parts[i][:available]
+                parts[i] = indicator + _byte_truncate(parts[i], available)
             else:
                 parts[i] = indicator
 

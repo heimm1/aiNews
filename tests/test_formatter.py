@@ -58,13 +58,13 @@ class TestFormatReport:
 class TestSplitMessage:
     def test_short_message_not_split(self):
         msg = "Hello, short message"
-        parts = split_message(msg, max_chars=100)
+        parts = split_message(msg, max_bytes=100)
         assert len(parts) == 1
         assert parts[0] == msg
 
     def test_very_long_single_section_splits_anyway(self):
         msg = "No sections here\n" + ("z" * 500)
-        parts = split_message(msg, max_chars=100)
+        parts = split_message(msg, max_bytes=100)
         assert len(parts) > 1
         for p in parts:
-            assert len(p) <= 100
+            assert len(p.encode("utf-8")) <= 100
