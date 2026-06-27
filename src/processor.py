@@ -45,10 +45,13 @@ SYSTEM_PROMPT = """你是一位资深的AI日报主编。你的任务是：
 - GitHub项目优先选近期热门、实用性强的"""
 
 
-def build_prompt(raw_items):
-    """Build the user prompt with raw collected items."""
-    lines = ["以下是今天采集到的原始AI资讯和GitHub项目：\n"]
-    for i, item in enumerate(raw_items, 1):
+def build_prompt(raw_items, max_items=200):
+    """Build the user prompt with raw collected items, capped to max_items."""
+    items = raw_items[:max_items]
+    if len(raw_items) > max_items:
+        logger.info(f"Capping items from {len(raw_items)} to {max_items} for LLM prompt")
+    lines = [f"以下是今天采集到的原始AI资讯和GitHub项目（共{len(items)}条）：\n"]
+    for i, item in enumerate(items, 1):
         item_type = "新闻" if item.get("item_type", "news") == "news" else "GitHub项目"
         stars_info = f" (⭐{item.get('stars', 0)})" if item.get("stars") else ""
         lines.append(
@@ -63,11 +66,18 @@ def build_prompt(raw_items):
 
 
 def parse_llm_response(text):
-    """Parse Claude's JSON response, handling markdown code fences."""
+    """Parse LLM JSON response, handling markdown code fences."""
+    if not text:
+        logger.error("LLM returned empty response")
+        return {"news": [], "github_projects": []}
+
     text = text.strip()
+    logger.info(f"LLM response length: {len(text)} chars, starts with: {text[:200]}")
+
     if text.startswith("```"):
         text = re.sub(r"^```\w*\n?", "", text)
         text = re.sub(r"\n?```$", "", text)
+        text = text.strip()
 
     try:
         data = json.loads(text)
@@ -76,7 +86,8 @@ def parse_llm_response(text):
             "github_projects": data.get("github_projects", []),
         }
     except json.JSONDecodeError:
-        logger.warning("Failed to parse LLM JSON response")
+        logger.warning(f"Failed to parse LLM JSON. Raw text (first 500 chars): {text[:500]}")
+        logger.warning(f"Raw text (last 200 chars): {text[-200:]}")
         return {"news": [], "github_projects": []}
 
 
@@ -100,18 +111,23 @@ def process_items(raw_items, model=None):
             client_kwargs["base_url"] = base_url
             logger.info(f"Using custom base URL: {base_url}")
         client = anthropic.Anthropic(**client_kwargs)
-        logger.info(f"Calling model: {model}")
+        logger.info(f"Calling model: {model}, prompt length: {len(user_prompt)} chars, max_tokens: 8192")
         response = client.messages.create(
             model=model,
-            max_tokens=4096,
+            max_tokens=8192,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )
 
+        logger.info(f"Response content blocks: {len(response.content)}, stop_reason: {response.stop_reason}")
         text = ""
-        for block in response.content:
-            if block.type == "text":
+        for i, block in enumerate(response.content):
+            logger.info(f"Block {i}: type={getattr(block, 'type', 'unknown')}")
+            if hasattr(block, 'type') and block.type == "text":
                 text += block.text
+
+        if not text:
+            logger.error(f"No text in response. Raw content: {response.content}")
 
         return parse_llm_response(text)
 
