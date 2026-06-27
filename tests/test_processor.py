@@ -24,6 +24,27 @@ class TestBuildPrompt:
         assert "JSON" in prompt
 
 
+class TestBuildPromptEdgeCases:
+    def test_empty_items_produces_valid_prompt(self):
+        prompt = build_prompt([])
+        assert "AI" in prompt or "JSON" in prompt
+        # Should not crash
+
+    def test_missing_fields_handled_gracefully(self):
+        bad_items = [{"item_type": "news"}]  # missing title, summary, url, source
+        prompt = build_prompt(bad_items)
+        # Should not raise KeyError
+        assert "JSON" in prompt
+
+    def test_none_summary_handled_gracefully(self):
+        items_with_none_summary = [
+            {"item_type": "news", "title": "Test", "summary": None, "url": "https://example.com", "source": "Test"}
+        ]
+        prompt = build_prompt(items_with_none_summary)
+        assert "None" not in prompt
+        assert "Test" in prompt
+
+
 class TestParseLlmResponse:
     def test_parses_valid_json_response(self):
         response = '''{
@@ -57,25 +78,38 @@ class TestProcessItems:
         mock_response.content = [
             MagicMock(
                 type="text",
-                text='{"news": [{"title": "T", "summary": "S", "url": "U", "source": "X"}], "github_projects": []}',
+                text='{"news": [{"title": "T", "summary": "S", "url": "U", "source": "X"}], "github_projects": [{"title": "R", "summary": "D", "url": "G", "stars": 100}]}',
             )
         ]
 
-        with patch("src.processor.anthropic.Anthropic") as mock_anthro:
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}), \
+             patch("src.processor.anthropic.Anthropic") as mock_anthro:
             mock_instance = Mock()
             mock_instance.messages.create.return_value = mock_response
             mock_anthro.return_value = mock_instance
 
             result = process_items(RAW_ITEMS, model="claude-sonnet-4-6")
 
-        assert "news" in result
-        assert "github_projects" in result
+        assert len(result["news"]) == 1
+        assert result["news"][0]["title"] == "T"
+        assert len(result["github_projects"]) == 1
+        assert result["github_projects"][0]["title"] == "R"
 
     def test_handles_api_error(self):
-        with patch("src.processor.anthropic.Anthropic") as mock_anthro:
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}), \
+             patch("src.processor.anthropic.Anthropic") as mock_anthro:
             mock_anthro.side_effect = Exception("API key invalid")
 
             result = process_items(RAW_ITEMS, model="claude-sonnet-4-6")
 
         assert "news" in result
         assert len(result["news"]) > 0  # fallback returns raw items
+
+
+class TestProcessItemsEdgeCases:
+    def test_missing_api_key_returns_fallback(self):
+        with patch.dict("os.environ", {}, clear=True):  # Remove ANTHROPIC_API_KEY
+            from src.processor import process_items
+            result = process_items(RAW_ITEMS, model="claude-sonnet-4-6")
+            assert "news" in result
+            assert "github_projects" in result

@@ -49,13 +49,13 @@ def build_prompt(raw_items):
     """Build the user prompt with raw collected items."""
     lines = ["以下是今天采集到的原始AI资讯和GitHub项目：\n"]
     for i, item in enumerate(raw_items, 1):
-        item_type = "新闻" if item["item_type"] == "news" else "GitHub项目"
+        item_type = "新闻" if item.get("item_type", "news") == "news" else "GitHub项目"
         stars_info = f" (⭐{item.get('stars', 0)})" if item.get("stars") else ""
         lines.append(
-            f"[{i}] [{item_type}] {item['title']}{stars_info}\n"
-            f"    摘要: {item['summary'][:300]}\n"
-            f"    链接: {item['url']}\n"
-            f"    来源: {item['source']}\n"
+            f"[{i}] [{item_type}] {item.get('title', '')}{stars_info}\n"
+            f"    摘要: {str(item.get('summary', '') or '')[:300]}\n"
+            f"    链接: {item.get('url', '')}\n"
+            f"    来源: {item.get('source', 'Unknown')}\n"
         )
 
     lines.append("\n请筛选最有价值的 10-18 条内容，输出为JSON格式。")
@@ -112,11 +112,11 @@ def process_items(raw_items, model="claude-sonnet-4-6"):
 
 def _fallback_items(raw_items):
     """When LLM fails, return raw items as-is."""
-    news_items = [it for it in raw_items if it["item_type"] == "news"]
-    github_items = [it for it in raw_items if it["item_type"] == "github"]
+    news_items = [it for it in raw_items if it.get("item_type") == "news"]
+    github_items = [it for it in raw_items if it.get("item_type") == "github"]
     return {
-        "news": [{"title": it["title"], "summary": it["summary"], "url": it["url"], "source": it["source"]}
+        "news": [{"title": it.get("title", ""), "summary": it.get("summary", ""), "url": it.get("url", ""), "source": it.get("source", "Unknown")}
                  for it in news_items[:10]],
-        "github_projects": [{"title": it["title"], "summary": it["summary"], "url": it["url"], "stars": it.get("stars", 0)}
+        "github_projects": [{"title": it.get("title", ""), "summary": it.get("summary", ""), "url": it.get("url", ""), "stars": it.get("stars", 0)}
                             for it in github_items[:8]],
     }
