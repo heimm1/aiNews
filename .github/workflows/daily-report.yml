@@ -2,7 +2,7 @@ name: AI Daily Report
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # UTC 00:00 = Beijing 08:00
+    - cron: '0 22 * * *'   # UTC 22:00 = Beijing 06:00 (early to offset GH Actions delay)
   workflow_dispatch:
 
 jobs:
